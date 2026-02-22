@@ -272,13 +272,11 @@ class DijkstraRouterTanger:
 
     def trouver_chemin_optimal(self, p_dep, p_arr, critere='mixte'):
         self.ajuster_coefficients(critere)
-        # print(f"\n🔍 Calcul de l'itinéraire optimal ({critere})...") # Commenté pour mode batch plus propre
         try:
             n1 = self.trouver_noeuds_proches(p_dep)[0][0]
             n2 = self.trouver_noeuds_proches(p_arr)[0][0]
             return self.dijkstra(n1, n2)
         except Exception as e:
-            # print(f"❌ Erreur de localisation des nœuds: {e}")
             return None
 
     def _recuperer_noms_rues(self, chemin):
@@ -305,10 +303,17 @@ class DijkstraRouterTanger:
         # Affichage
         print(f"🚩 DÉPART  : {n_dep}")
         print(f"⬇️  Via {len(rues)} axes routiers")
+        
+        print("\n📍 RUES TRAVERSÉES (Détail complet) :")
         if len(rues) > 0:
-            for r in rues[:5]: print(f"   • {r}")
-            if len(rues) > 5: print(f"   • ... et {len(rues)-5} autres rues")
-        print(f"🏁 ARRIVÉE : {n_arr}")
+            for r in rues: 
+                print(f"   • {r}")
+        else:
+            print("   (Aucun nom de rue disponible)")
+            
+        print(f"\n🔗 Nœuds traversés (IDs) : {', '.join(map(str, res.chemin))}")
+        
+        print(f"\n🏁 ARRIVÉE : {n_arr}")
         
         print("-" * 60)
         print(f"📏 Distance totale : {res.distance_totale/1000:.2f} km")
@@ -526,6 +531,182 @@ class DijkstraRouterTanger:
         print(f"📊 RÉSULTATS: {len(res_list)}/{total} trajets réussis")
         if res_list: self.exporter_rapport_complet(res_list)
 
+    # --- NOUVELLES FONCTIONNALITÉS (AMÉLIORATIONS) ---
+
+    def generer_graphe_mathematique_illustratif(self):
+        """
+        Génère une image du réseau sous forme de graphe mathématique 
+        pour illustrer le fonctionnement de Dijkstra avec des données factices.
+        """
+        print("\n🎨 Génération du graphe mathématique illustratif (Théorie des graphes)...")
+        
+        # 1. Création d'un graphe factice (mock data)
+        # Structure des données en entrée : Dictionnaire de nœuds avec coordonnées (lat, lon)
+        noeuds_mock = {
+            "A (Départ)": (35.78, -5.81),
+            "B": (35.77, -5.80),
+            "C": (35.76, -5.82),
+            "D": (35.75, -5.79),
+            "E": (35.74, -5.81),
+            "F (Arrivée)": (35.73, -5.80)
+        }
+        
+        G_mock = nx.Graph()
+        for nom, pos in noeuds_mock.items():
+            # Inversion lat/lon pour l'affichage (x=lon, y=lat)
+            G_mock.add_node(nom, pos=(pos[1], pos[0]))
+            
+        # 2. Ajout des arêtes avec des poids (distances)
+        # Structure : Liste de tuples (Nœud1, Nœud2, Poids)
+        aretes_mock = [
+            ("A (Départ)", "B", 2.5),
+            ("A (Départ)", "C", 3.0),
+            ("B", "C", 1.2),
+            ("B", "D", 4.0),
+            ("C", "E", 2.8),
+            ("D", "E", 1.5),
+            ("D", "F (Arrivée)", 3.5),
+            ("E", "F (Arrivée)", 2.0)
+        ]
+        
+        for u, v, w in aretes_mock:
+            G_mock.add_edge(u, v, weight=w)
+            
+        # 3. Calcul du plus court chemin avec Dijkstra
+        depart = "A (Départ)"
+        arrivee = "F (Arrivée)"
+        chemin_optimal = nx.dijkstra_path(G_mock, depart, arrivee, weight='weight')
+        edges_chemin = list(zip(chemin_optimal, chemin_optimal[1:]))
+        
+        # 4. Visualisation avec Matplotlib
+        plt.figure(figsize=(10, 7))
+        pos = nx.get_node_attributes(G_mock, 'pos')
+        
+        # Dessiner tous les nœuds (couleur neutre)
+        nx.draw_networkx_nodes(G_mock, pos, node_color='lightgray', node_size=1500, edgecolors='gray')
+        
+        # Mettre en surbrillance les nœuds du chemin optimal
+        nx.draw_networkx_nodes(G_mock, pos, nodelist=chemin_optimal, node_color='orange', node_size=1500, edgecolors='red', linewidths=2)
+        
+        # Mettre en évidence le départ et l'arrivée
+        nx.draw_networkx_nodes(G_mock, pos, nodelist=[depart], node_color='lightgreen', node_size=1500, edgecolors='green', linewidths=2)
+        nx.draw_networkx_nodes(G_mock, pos, nodelist=[arrivee], node_color='salmon', node_size=1500, edgecolors='red', linewidths=2)
+        
+        # Dessiner toutes les arêtes (couleur neutre)
+        nx.draw_networkx_edges(G_mock, pos, edge_color='gray', width=1.5, style='dashed')
+        
+        # Mettre en surbrillance les arêtes du chemin optimal
+        nx.draw_networkx_edges(G_mock, pos, edgelist=edges_chemin, edge_color='red', width=3)
+        
+        # Ajouter les étiquettes des nœuds (noms des places)
+        nx.draw_networkx_labels(G_mock, pos, font_size=10, font_weight='bold')
+        
+        # Ajouter les étiquettes des arêtes (poids/distances)
+        edge_labels = nx.get_edge_attributes(G_mock, 'weight')
+        edge_labels_format = {k: f"{v} km" for k, v in edge_labels.items()}
+        nx.draw_networkx_edge_labels(G_mock, pos, edge_labels=edge_labels_format, font_size=9, font_color='blue', bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
+        
+        plt.title(f"Théorie des Graphes : Algorithme de Dijkstra\nChemin optimal en rouge ({depart} ➔ {arrivee})", fontsize=14, fontweight='bold', pad=20)
+        plt.axis('off')
+        plt.tight_layout()
+        
+        fn = f"graphe_dijkstra_illustratif_{int(time.time())}.png"
+        plt.savefig(fn, dpi=200, bbox_inches='tight')
+        print(f"✅ Image du graphe mathématique sauvegardée: {fn}")
+        plt.close()
+
+    def visualiser_chemin_web(self, res, n_dep, n_arr):
+        """Génère la carte interactive HTML avec style Satellite et POIs."""
+        if not res: return
+        print("\n🗺️ Génération de la carte interactive...")
+        
+        lats, lons = zip(*res.points_coordonnees)
+        centre_lat = sum(lats) / len(lats)
+        centre_lon = sum(lons) / len(lons)
+        
+        # Création de la carte avec fond par défaut (sera écrasé par la tuile satellite)
+        m = folium.Map(location=[centre_lat, centre_lon], zoom_start=14, tiles=None)
+        
+        # Ajout du fond de carte Satellite (Esri World Imagery)
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='Esri Satellite',
+            overlay=False,
+            control=True
+        ).add_to(m)
+        
+        # Ajout d'un fond de carte alternatif (OpenStreetMap classique)
+        folium.TileLayer('openstreetmap', name='OpenStreetMap', control=True).add_to(m)
+
+        # Tracé de la ligne du chemin (PolyLine)
+        folium.PolyLine(
+            res.points_coordonnees, 
+            color='#00BFFF', # Deep Sky Blue pour bien ressortir sur le satellite
+            weight=5, 
+            opacity=0.8,
+            tooltip="Chemin optimal"
+        ).add_to(m)
+        
+        # Marqueurs pour les points intermédiaires
+        # On ignore le premier et le dernier point qui auront leurs propres marqueurs
+        for coord in res.points_coordonnees[1:-1]:
+            folium.CircleMarker(
+                location=coord,
+                radius=4,
+                color='orange',
+                fill=True,
+                fill_color='orange',
+                fill_opacity=0.9,
+                popup="Point intermédiaire",
+                tooltip="Nœud traversé"
+            ).add_to(m)
+
+        # Marqueur de DÉPART
+        folium.Marker(
+            res.points_coordonnees[0], 
+            popup=f"<b>Départ:</b> {n_dep}", 
+            tooltip="Point de départ",
+            icon=folium.Icon(color='green', icon='play', prefix='fa')
+        ).add_to(m)
+        
+        # Marqueur d'ARRIVÉE
+        folium.Marker(
+            res.points_coordonnees[-1], 
+            popup=f"<b>Arrivée:</b> {n_arr}", 
+            tooltip="Point d'arrivée",
+            icon=folium.Icon(color='red', icon='flag', prefix='fa')
+        ).add_to(m)
+        
+        # Panneau d'information flottant (Contrôle HTML personnalisé)
+        distance_km = res.distance_totale / 1000
+        nb_intermediaires = len(res.points_coordonnees) - 2
+        
+        html_content = f"""
+        <div style="
+            position: fixed; 
+            bottom: 50px; left: 50px; width: 320px; height: auto; 
+            background-color: rgba(255, 255, 255, 0.9); border: 2px solid #333; z-index:9999; font-size:14px;
+            padding: 15px; border-radius: 8px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
+            font-family: Arial, sans-serif;
+            ">
+            <h3 style="margin-top:0; color: #2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">🗺️ Résumé du Trajet</h3>
+            <p><b>Algorithme :</b> <span style="color: #e74c3c;">Dijkstra</span></p>
+            <p><b>🟢 Départ :</b> {n_dep}</p>
+            <p><b>🔴 Arrivée :</b> {n_arr}</p>
+            <p><b>📏 Distance totale :</b> {distance_km:.2f} km</p>
+            <p><b>📍 Points intermédiaires :</b> {nb_intermediaires}</p>
+        </div>
+        """
+        m.get_root().html.add_child(folium.Element(html_content))
+        
+        # Ajout du contrôle des couches
+        folium.LayerControl().add_to(m)
+
+        fn = f"web_carte_{int(time.time())}.html"
+        m.save(fn)
+        print(f"✅ Carte Web interactive (Satellite) sauvegardée: '{fn}'")
+
     # --- MENU INTERACTIF ---
     
     def choisir_points_interactif(self):
@@ -558,18 +739,6 @@ class DijkstraRouterTanger:
             print(f"{i:2d}. {k}")
         print("Q. Quitter")
 
-    def visualiser_chemin_web(self, res, n_dep, n_arr):
-        """Génère la carte interactive HTML."""
-        if not res: return
-        lats, lons = zip(*res.points_coordonnees)
-        m = folium.Map(location=[sum(lats)/len(lats), sum(lons)/len(lons)], zoom_start=14)
-        folium.PolyLine(res.points_coordonnees, color='blue', weight=5, opacity=0.7).add_to(m)
-        folium.Marker(res.points_coordonnees[0], popup=f"Départ: {n_dep}", icon=folium.Icon(color='green')).add_to(m)
-        folium.Marker(res.points_coordonnees[-1], popup=f"Arrivée: {n_arr}", icon=folium.Icon(color='red')).add_to(m)
-        fn = f"web_carte_{int(time.time())}.html"
-        m.save(fn)
-        print(f"✅ Carte Web sauvegardée: '{fn}'")
-
 def main():
     """Menu Principal Professionnel."""
     print("\n" + "="*70)
@@ -600,11 +769,12 @@ def main():
         print("│  1. 🧭 Mode Interactif (Choix manuel de trajet)    │")
         print("│  2. 🧪 Mode Test Batch (10 trajets automatiques)   │")
         print("│  3. 📊 Générer Graphiques pour Rapport             │")
-        print("│  4. 📋 Aide                                         │")
-        print("│  5. 🚪 Quitter                                      │")
+        print("│  4. 🕸️  Générer Graphe Mathématique (Illustration)  │")
+        print("│  5. 📋 Aide                                         │")
+        print("│  6. 🚪 Quitter                                      │")
         print("└─────────────────────────────────────────────────────┘")
         
-        choix = input("\n👉 Votre choix (1-5): ").strip()
+        choix = input("\n👉 Votre choix (1-6): ").strip()
         
         if choix == '1':
             print("\n" + "─"*70 + "\n 🧭 MODE INTERACTIF\n" + "─"*70)
@@ -615,10 +785,12 @@ def main():
                 router.afficher_resultats(resultat, n1, n2, crit, sauvegarder=True)
                 
                 if resultat:
-                    print("\n📤 ACTIONS: 1.PNG (Word) 2.HTML (Web) 3.Menu")
+                    # Génération automatique de l'image du graphe avec le chemin
+                    router.generer_graphique_chemin_visuel_rapport(resultat, n1, n2)
+                    
+                    print("\n📤 ACTIONS SUPPLÉMENTAIRES: 1.HTML (Web) 2.Menu")
                     act = input("👉 Choix: ").strip()
-                    if act == '1': router.generer_graphique_chemin_visuel_rapport(resultat, n1, n2)
-                    elif act == '2': router.visualiser_chemin_web(resultat, n1, n2)
+                    if act == '1': router.visualiser_chemin_web(resultat, n1, n2)
         
         elif choix == '2':
             router.mode_test_rapport()
@@ -629,11 +801,15 @@ def main():
             input("\n✅ Entrée pour continuer...")
             
         elif choix == '4':
+            router.generer_graphe_mathematique_illustratif()
+            input("\n✅ Entrée pour continuer...")
+            
+        elif choix == '5':
              print("\nOBJECTIF: Calcul chemin optimal via Dijkstra.")
-             print("FONCTIONS: Matrice distances, Histogramme temps, Carte Web.")
+             print("FONCTIONS: Matrice distances, Histogramme temps, Carte Web, Graphe Mathématique.")
              input("\n✅ Entrée pour continuer...")
              
-        elif choix == '5':
+        elif choix == '6':
             print("\n👋 Au revoir!"); break
 
 if __name__ == "__main__":
