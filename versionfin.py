@@ -642,7 +642,7 @@ class DijkstraRouterTanger:
         # Tracé de la ligne du chemin (PolyLine)
         folium.PolyLine(
             res.points_coordonnees, 
-            color='#00BFFF', # Deep Sky Blue pour bien ressortir sur le satellite
+            color='blue', 
             weight=5, 
             opacity=0.8,
             tooltip="Chemin optimal"
@@ -650,16 +650,17 @@ class DijkstraRouterTanger:
         
         # Marqueurs pour les points intermédiaires
         # On ignore le premier et le dernier point qui auront leurs propres marqueurs
-        for coord in res.points_coordonnees[1:-1]:
+        for node_id, coord in zip(res.chemin[1:-1], res.points_coordonnees[1:-1]):
+            nom_noeud = str(node_id)
             folium.CircleMarker(
                 location=coord,
-                radius=4,
-                color='orange',
+                radius=8,
+                color='darkorange',
                 fill=True,
-                fill_color='orange',
-                fill_opacity=0.9,
-                popup="Point intermédiaire",
-                tooltip="Nœud traversé"
+                fill_color='darkorange',
+                fill_opacity=0.8,
+                popup=nom_noeud,
+                tooltip=nom_noeud
             ).add_to(m)
 
         # Marqueur de DÉPART
@@ -682,23 +683,31 @@ class DijkstraRouterTanger:
         distance_km = res.distance_totale / 1000
         nb_intermediaires = len(res.points_coordonnees) - 2
         
-        html_content = f"""
+        from branca.element import Template, MacroElement
+        
+        template = f"""
+        {{% macro html(this, kwargs) %}}
         <div style="
             position: fixed; 
-            bottom: 50px; left: 50px; width: 320px; height: auto; 
+            top: 10px; right: 10px; width: 320px; height: auto; 
             background-color: rgba(255, 255, 255, 0.9); border: 2px solid #333; z-index:9999; font-size:14px;
             padding: 15px; border-radius: 8px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
             font-family: Arial, sans-serif;
             ">
-            <h3 style="margin-top:0; color: #2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">🗺️ Résumé du Trajet</h3>
-            <p><b>Algorithme :</b> <span style="color: #e74c3c;">Dijkstra</span></p>
-            <p><b>🟢 Départ :</b> {n_dep}</p>
-            <p><b>🔴 Arrivée :</b> {n_arr}</p>
-            <p><b>📏 Distance totale :</b> {distance_km:.2f} km</p>
-            <p><b>📍 Points intermédiaires :</b> {nb_intermediaires}</p>
+            <h3 style="margin-top:0; color: #2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">🗺️ Légende du Trajet</h3>
+            <ul style="list-style-type: none; padding: 0; margin: 0; line-height: 1.8;">
+                <li>🏁 <b>Départ :</b> {n_dep}</li>
+                <li>🏁 <b>Arrivée :</b> {n_arr}</li>
+                <li>📏 <b>Distance :</b> {distance_km:.2f} km</li>
+                <li>📍 <b>POIs :</b> {nb_intermediaires}</li>
+                <li>⚡ <b>Algo :</b> DIJKSTRA</li>
+            </ul>
         </div>
+        {{% endmacro %}}
         """
-        m.get_root().html.add_child(folium.Element(html_content))
+        macro = MacroElement()
+        macro._template = Template(template)
+        m.get_root().add_child(macro)
         
         # Ajout du contrôle des couches
         folium.LayerControl().add_to(m)
