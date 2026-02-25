@@ -1,146 +1,111 @@
-# 🚗 Projet Algorithme de Dijkstra – Tanger (Professional Edition)
+# 🚗 Optimisation de Trajets Dijkstra — Réseau Routier de Tanger (Maroc)
 
-Ce projet implémente les algorithmes **Dijkstra** et **A\*** pour trouver les itinéraires optimaux dans la ville de Tanger, Maroc, en utilisant des données routières réelles via OpenStreetMap.
-
----
-
-## 📋 Description
-
-L'application calcule le meilleur trajet entre deux points d'intérêt à Tanger selon plusieurs critères (distance, temps, coût). Elle utilise des graphes pondérés construits à partir de données géographiques réelles et offre une interface en ligne de commande professionnelle.
+Projet universitaire avancé implémentant l'algorithme de **Dijkstra** sur un graphe routier réel extrait d'OpenStreetMap (OSM) pour la ville de Tanger. Le système propose une navigation multicritère avec des sorties visuelles et analytiques de haute précision.
 
 ---
 
-## ✨ Fonctionnalités
+## 📋 Description du Projet
 
-| Fonctionnalité | Détail |
-|---|---|
-| **Dijkstra** | Algorithme classique garanti optimal – O(E log V) |
-| **A\*** | Algorithme heuristique (Haversine), 2–5× plus rapide que Dijkstra |
-| **Multi-critères** | Optimisation selon la distance, le temps, le coût ou un mode mixte |
-| **60+ Points d'intérêt** | Gares, aéroport, médina, plages, universités, hôpitaux… |
-| **Détection de POIs** | Points d'intérêt traversés détectés avec rayon configurable |
-| **Mode Interactif** | Choix manuel du départ, de l'arrivée, du critère et de l'algorithme |
-| **Mode Batch** | 10 trajets automatiques avec barre de progression `tqdm` |
-| **Carte HTML interactive** | Folium avec tile switcher, minimap, fullscreen, panneau d'info |
-| **Image PNG** | Carte statique pour rapports Word/PDF |
-| **Export JSON** | Résultats détaillés par trajet et rapport complet batch |
-| **Export CSV** | Tableau récapitulatif par trajet |
-| **Matrice de distances** | Heatmap seaborn entre 4 lieux clés |
-| **Histogramme** | Distribution des temps de trajet sur 20 trajets aléatoires |
-| **Logging** | Console + fichier `dijkstra_router.log` |
-| **Configuration centralisée** | Tous les paramètres dans `config.py` |
-| **Cache LRU** | Accélération des recherches de nœuds proches |
+L'application calcule l'itinéraire optimal entre plus de **60 points d'intérêt (POI)** à Tanger (Médina, Gares, Aéroport, Malls, Universités). Elle se distingue par sa capacité à modéliser le réseau urbain réel et à proposer des visualisations interactives modernes.
+
+### 🧠 Cœur Algorithmique
+- **Algorithme de Dijkstra** : Implémenté avec un **tas binaire (priority queue)** pour une complexité optimale en $O(E \log V)$.
+- **Pondération Multicritère** : Calcul du coût basé sur une fonction composite :
+  $$W = \alpha \cdot \text{distance} + \beta \cdot \text{temps} + \gamma \cdot \text{coût}$$
+- **Heuristiques de Géomatique** : Utilisation de la distance de **Haversine** pour la recherche spatiale.
 
 ---
 
-## 🛠️ Prérequis
+## ✨ Fonctionnalités Avancées
 
-Python 3.9+ et les bibliothèques suivantes :
+| Fonctionnalité | Description |
+| :--- | :--- |
+| **Carte Interactive (Folium)** | Visualisation Web avec **AntPath** (animation du tracé), fond Satellite Esri, et panneau d'info flottant. |
+| **Analyse Dynamique** | Liste défilante (Scroll List) des rues traversées et popups d'étapes enrichies. |
+| **Graphes Analytiques** | Génération de graphes théoriques avec **NetworkX** (layout Kamada-Kawai) étiquetant POIs et distances. |
+| **Rapports JSON Structurés** | Export complet incluant métadonnées, IDs de nœuds, rues et coordonnées GPS. |
+| **Études Statistiques** | Génération automatique de matrices de distances (Heatmap) et histogrammes de distribution. |
+| **Validation du Graphe** | Outils de diagnostic pour détecter les nœuds isolés ou les segments sans poids. |
 
+---
+
+## 🛠️ Prérequis & Installation
+
+### Configuration Requise
+- **Python 3.9+**
+- Connexion internet (pour le chargement initial de la carte via OSMnx)
+
+### Dépendances
 ```bash
 pip install -r requirements.txt
 ```
 
-Contenu de `requirements.txt` :
-
-```
+*Contenu recommandé pour `requirements.txt` :*
+```text
 osmnx>=1.3.0
 networkx>=3.0
 folium>=0.14.0
 matplotlib>=3.6.0
 numpy>=1.23.0
-tqdm>=4.65.0
-seaborn>=0.12.0
+branca>=0.6.0
+pandas
+seaborn
 ```
-
-> `seaborn` et `tqdm` sont optionnels mais fortement recommandés.
 
 ---
 
-## 🚀 Installation et Exécution
+## 🚀 Utilisation
 
 ```bash
-# 1. Cloner le dépôt
-git clone https://github.com/Najeh-Yassin/Dijkstra-.git
-cd Dijkstra-
-
-# 2. Installer les dépendances
-pip install -r requirements.txt
-
-# 3. Lancer l'application
 python versionfin.py
 ```
+
+1.  **Phase de Chargement** : L'application télécharge le réseau de Tanger et prépare les poids.
+2.  **Menu Interactif** :
+    -   **Option 1** : Choisir un trajet manuel, le critère d'optimisation (Distance, Temps, Coût), et générer la carte.
+    -   **Option 2** : Lancer un mode test batch pour générer 10 trajets de référence.
+    -   **Option 3/4** : Générer les visuels pour le rapport académique (Graphes théoriques et Heatmaps).
 
 ---
 
 ## 📂 Structure du Projet
 
-```
+```text
 struct_Project/
-├── versionfin.py          # Script principal (router + UI)
-├── config.py              # Configuration centralisée (paramètres)
-├── requirements.txt       # Dépendances Python
-├── README.md              # Documentation
-├── dijkstra_router.log    # Fichier de logs (généré à l'exécution)
-├── cache/                 # Cache OSMnx (généré automatiquement)
-├── resultat_*.json        # Résultats JSON par trajet
-├── resultat_*.csv         # Résultats CSV par trajet
-├── rapport_complet_*.json # Rapport batch complet
-├── web_carte_*.html       # Cartes interactives Folium
-├── rapport_trajet_*.png   # Cartes statiques PNG
-├── rapport_matrice.png    # Heatmap matrice de distances
-└── rapport_histogramme.png# Histogramme des temps de trajet
+├── versionfin.py           # Noyau algorithmique et interface principale
+├── config.py               # Paramètres de pondération et constantes
+├── requirements.txt        # Dépendances Python
+├── cache/                  # Cache local des données OSMnx
+├── reports/                # Dossier recommandé pour les sorties
+│   ├── rapport_*.json      # Rapports détaillés (JSON)
+│   ├── web_carte_*.html    # Cartes interactives animées
+│   ├── graphe_chemin_*.png # Visualisation théorique du chemin
+│   └── rapport_matrice.png # Matrice de distances du réseau
+└── dijkstra_router.log     # Journalisation des événements
 ```
 
 ---
 
-## ⚙️ Configuration (`config.py`)
+## ⚙️ Détails Techniques de la Visualisation
 
-Tous les paramètres sont centralisés dans [`config.py`](config.py) :
+### Carte Web Web (HTML)
+La méthode `visualiser_chemin_web` intègre un système de **template Jinja2/HTML** pour afficher :
+-   Le nom de la rue actuelle ou du POI le plus proche.
+-   La distance cumulée en kilomètres depuis le départ.
+-   Une animation de type "AntPath" pour indiquer clairement le sens de circulation.
 
-```python
-DEFAULT_SPEED_KMH = 45.0      # Vitesse moyenne urbaine
-FUEL_COST_PER_KM  = 1.8       # Coût carburant (DH/km)
-DEFAULT_DETECTION_RADIUS_M = 200  # Rayon détection POIs (m)
-ROUTE_COLOR = "#1a73e8"        # Couleur de l'itinéraire sur la carte
-LOG_LEVEL   = "INFO"           # Niveau de log
-```
-
----
-
-## 🗺️ Carte Interactive HTML
-
-La carte générée inclut :
-- **3 fonds de carte** : OpenStreetMap, CartoDB Positron, Satellite (Esri)
-- **Minimap** en bas à droite
-- **Bouton plein écran**
-- **Panneau d'information** flottant (distance, temps, coût, algorithme)
-- **Marqueurs animés** départ (vert) / arrivée (rouge)
-- **Cercles orange** pour chaque POI traversé avec popup détaillé
-- **Contrôle des couches** pour afficher/masquer les POIs
+### Graphe de Rapport (PNG)
+Le graphe analytique n'est pas une simple carte mais une représentation mathématique où :
+-   **Vert** : Point de départ.
+-   **Rouge** : Destination finale.
+-   **Orange** : Intersections clés nommées.
+-   **Labels bleus** : Poids précis de chaque segment sur l'arête.
 
 ---
 
-## 🔬 Algorithmes
-
-### Dijkstra
-- Garantit le chemin optimal
-- Explore tous les nœuds accessibles jusqu'à la destination
-- Complexité : **O(E log V)**
-
-### A* (recommandé)
-- Utilise une heuristique Haversine pour guider la recherche
-- Explore moins de nœuds → **2–5× plus rapide** en pratique
-- Même qualité de résultat sur les graphes routiers
-
-### Poids composite
-```
-w = α·distance + β·temps·3600 + γ·coût·100
-```
-Les coefficients α, β, γ sont ajustés selon le critère choisi.
+## 🎓 Contexte
+Projet réalisé dans le cadre du module **Analytique des Données – Structures Avancées**. 
+*Focus : Structures de données de type Graphe et optimisation algorithmique.*
 
 ---
-
-## 📝 Auteur
-
-Projet réalisé dans le cadre du module **Analytique des Données – Structures Avancées**.
+**Auteurs :** [Najeh Yassin](https://github.com/Najeh-Yassin) & Équipe Dijkstra Tanger.

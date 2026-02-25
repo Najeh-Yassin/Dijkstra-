@@ -10,6 +10,11 @@ import time
 from dataclasses import dataclass
 import json
 import random
+import unicodedata
+import re
+import datetime
+from folium.plugins import AntPath
+from branca.element import Template, MacroElement
 
 # Configuration globale
 ox.settings.use_cache = True
@@ -328,23 +333,50 @@ class DijkstraRouterTanger:
         print(f"🚗 Vitesse moyenne : {vitesse_moy:.1f} km/h")
         print("="*60)
         
-        # Sauvegarde optionnelle
+        # Sauvegarde optionnelle (AMÉLIORÉ)
         if sauvegarder:
-            data = {
-                "trajet": {"depart": n_dep, "arrivee": n_arr, "critere": critere},
-                "resultats": {
-                    "distance_km": round(res.distance_totale/1000, 2),
-                    "temps_min": round(res.temps_total*60, 1),
-                    "cout_dh": round(res.cout_total, 2),
-                    "vitesse_kmh": round(vitesse_moy, 1),
-                    "etapes": len(res.chemin),
-                    "rues": rues[:10]  # Premières 10 rues
+            def sanitiser(txt):
+                txt = unicodedata.normalize('NFD', txt).encode('ascii', 'ignore').decode('utf-8')
+                return re.sub(r'[^a-zA-Z0-9]', '_', txt)
+
+            try:
+                now = datetime.datetime.now()
+                ts_label = now.strftime("%Y-%m-%d %H:%M:%S")
+                fn_ts = now.strftime("%Y%m%d_%H%M%S")
+                vitesse_moy = (res.distance_totale/1000) / res.temps_total if res.temps_total > 0 else 0
+
+                rapport_json = {
+                    "meta": {
+                        "projet": "Optimisation Dijkstra — Réseau Routier de Tanger",
+                        "date_calcul": ts_label,
+                        "algorithme": "Dijkstra (tas binaire, complexité O(E log V))",
+                        "ponderation": {"alpha": round(self.alpha, 2), "beta": round(self.beta, 2), "gamma": round(self.gamma, 2)}
+                    },
+                    "trajet": {
+                        "depart": n_dep,
+                        "arrivee": n_arr,
+                        "critere": critere
+                    },
+                    "resultats": {
+                        "distance_km": round(res.distance_totale/1000, 2),
+                        "temps_min": round(res.temps_total*60, 1),
+                        "cout_dh": round(res.cout_total, 2),
+                        "vitesse_kmh": round(vitesse_moy, 1),
+                        "etapes": len(res.chemin),
+                        "noeuds_explores": res.nœuds_visites,
+                        "temps_calcul_ms": round(res.temps_calcul * 1000, 2),
+                        "rues": rues,
+                        "noeuds_ids": res.chemin,
+                        "coordonnees_chemin": [list(c) for c in res.points_coordonnees]
+                    }
                 }
-            }
-            fn = f"resultat_{int(time.time())}.json"
-            with open(fn, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            print(f"💾 Résultat sauvegardé: {fn}")
+                
+                fn = f"rapport_{sanitiser(n_dep)}_{sanitiser(n_arr)}_{fn_ts}.json"
+                with open(fn, 'w', encoding='utf-8') as f:
+                    json.dump(rapport_json, f, indent=2, ensure_ascii=False)
+                print(f"💾 Rapport JSON complet sauvegardé : {fn}")
+            except Exception as e:
+                print(f"❌ Erreur lors de l'export JSON : {e}")
 
     # --- FONCTIONS POUR LE RAPPORT ---
 
@@ -383,35 +415,68 @@ class DijkstraRouterTanger:
         print("✅ Statistiques prêtes pour la section 'Présentation du Réseau'")
 
     def generer_graphique_chemin_visuel_rapport(self, res, n_dep, n_arr):
-        """Génère une image PNG statique du chemin pour le rapport Word."""
+        """
+        Génère un véritable graphe mathématique NetworkX représentant les nœuds du chemin,
+        étiquetés avec les POI ou rues, et les distances sur les arêtes.
+        """
         if not res: return
-        print("\n🎨 Génération du tracé pour le rapport Word...")
-        
-        plt.figure(figsize=(10, 8))
-        # Fond (routes grises)
-        edges = list(self.G.edges())[:5000] # Limité pour la rapidité
-        for u, v in edges:
-            if u in self.noeuds_coords and v in self.noeuds_coords:
-                y = [self.noeuds_coords[u][0], self.noeuds_coords[v][0]]
-                x = [self.noeuds_coords[u][1], self.noeuds_coords[v][1]]
-                plt.plot(x, y, c='lightgray', lw=0.5, zorder=1)
-        
-        # Chemin (rouge)
-        path_y, path_x = zip(*res.points_coordonnees)
-        plt.plot(path_x, path_y, c='red', lw=2, label='Itinéraire optimal', zorder=2)
-        
-        # Points
-        plt.scatter([path_x[0]], [path_y[0]], c='green', s=100, label='Départ', zorder=3)
-        plt.scatter([path_x[-1]], [path_y[-1]], c='blue', s=100, label='Arrivée', zorder=3)
-        
-        plt.title(f"Itinéraire Optimisé : {n_dep} -> {n_arr}")
-        plt.legend()
-        plt.axis('off')
-        plt.tight_layout()
-        fn = f"rapport_trajet_{int(time.time())}.png"
-        plt.savefig(fn, dpi=150)
-        print(f"✅ Image sauvegardée: {fn}")
-        plt.close()
+        print(f"\n🎨 Génération du graphe analytique : {n_dep} → {n_arr}")
+
+        def sanitiser(txt):
+            txt = unicodedata.normalize('NFD', txt).encode('ascii', 'ignore').decode('utf-8')
+            return re.sub(r'[^a-zA-Z0-9]', '_', txt)
+
+        try:
+            G_path = nx.DiGraph()
+            labels = {}
+            
+            def _get_label(nid, idx):
+                lat, lon = self.noeuds_coords[nid]
+                for poi, pos in self.POINTS_INTERET.items():
+                    if self._haversine_distance(lat, lon, pos[0], pos[1]) < 0.2: return poi
+                data = self.G.nodes[nid]
+                nom = data.get('name') or data.get('nom')
+                if nom: return nom[0] if isinstance(nom, list) else nom
+                return f"Étape {idx}"
+
+            for i, nid in enumerate(res.chemin):
+                labels[nid] = _get_label(nid, i)
+                G_path.add_node(nid)
+                if i > 0:
+                    u, v = res.chemin[i-1], res.chemin[i]
+                    edge_data = min(self.G[u][v].values(), key=lambda x: x.get('poids_custom', 0))
+                    dist_km = edge_data.get('distance', 0) / 1000
+                    G_path.add_edge(u, v, weight=round(dist_km, 2))
+
+            plt.figure(figsize=(14, 10))
+            pos = nx.kamada_kawai_layout(G_path) # Kamada-Kawai pour un rendu plus équilibré
+            
+            colors = []
+            for i in range(len(res.chemin)):
+                if i == 0: colors.append('green')
+                elif i == len(res.chemin)-1: colors.append('red')
+                else: colors.append('orange')
+
+            nx.draw_networkx_nodes(G_path, pos, node_color=colors, node_size=1000, alpha=0.9, edgecolors='black')
+            nx.draw_networkx_edges(G_path, pos, edge_color='royalblue', width=4, arrowsize=25, arrowstyle='->')
+            nx.draw_networkx_labels(G_path, pos, labels, font_size=9, font_weight='bold', 
+                                   bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
+            
+            edge_labels = nx.get_edge_attributes(G_path, 'weight')
+            edge_labels = {k: f"{v} km" for k, v in edge_labels.items()}
+            nx.draw_networkx_edge_labels(G_path, pos, edge_labels=edge_labels, font_size=8, font_color='blue')
+
+            plt.title(f"Chemin Optimal : {n_dep} → {n_arr}\nDistance: {res.distance_totale/1000:.2f}km | Temps: {res.temps_total*60:.1f}min", 
+                      fontsize=14, fontweight='bold', pad=25)
+            plt.axis('off')
+            plt.tight_layout()
+            
+            fn = f"graphe_chemin_{sanitiser(n_dep)}_{sanitiser(n_arr)}.png"
+            plt.savefig(fn, dpi=200, bbox_inches='tight')
+            plt.close()
+            print(f"✅ Graphe analytique sauvegardé : {fn}")
+        except Exception as e:
+            print(f"❌ Erreur lors de la génération du graphique : {e}")
 
     def generer_analyse_pdf_conforme(self):
         """Génère Matrice et Histogramme de manière robuste."""
@@ -616,105 +681,103 @@ class DijkstraRouterTanger:
         plt.close()
 
     def visualiser_chemin_web(self, res, n_dep, n_arr):
-        """Génère la carte interactive HTML avec style Satellite et POIs."""
+        """
+        Génère une carte interactive HTML avec animation AntPath (flèches),
+        popups enrichis et panneau d'info flottant avec liste des rues.
+        """
         if not res: return
-        print("\n🗺️ Génération de la carte interactive...")
-        
-        lats, lons = zip(*res.points_coordonnees)
-        centre_lat = sum(lats) / len(lats)
-        centre_lon = sum(lons) / len(lons)
-        
-        # Création de la carte avec fond par défaut (sera écrasé par la tuile satellite)
-        m = folium.Map(location=[centre_lat, centre_lon], zoom_start=14, tiles=None)
-        
-        # Ajout du fond de carte Satellite (Esri World Imagery)
-        folium.TileLayer(
-            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            attr='Esri',
-            name='Esri Satellite',
-            overlay=False,
-            control=True
-        ).add_to(m)
-        
-        # Ajout d'un fond de carte alternatif (OpenStreetMap classique)
-        folium.TileLayer('openstreetmap', name='OpenStreetMap', control=True).add_to(m)
+        print(f"\n🗺️  Génération de la carte interactive enrichie : {n_dep} → {n_arr}")
 
-        # Tracé de la ligne du chemin (PolyLine)
-        folium.PolyLine(
-            res.points_coordonnees, 
-            color='blue', 
-            weight=5, 
-            opacity=0.8,
-            tooltip="Chemin optimal"
-        ).add_to(m)
-        
-        # Marqueurs pour les points intermédiaires
-        # On ignore le premier et le dernier point qui auront leurs propres marqueurs
-        for node_id, coord in zip(res.chemin[1:-1], res.points_coordonnees[1:-1]):
-            nom_noeud = str(node_id)
-            folium.CircleMarker(
-                location=coord,
-                radius=8,
-                color='darkorange',
-                fill=True,
-                fill_color='darkorange',
-                fill_opacity=0.8,
-                popup=nom_noeud,
-                tooltip=nom_noeud
+        def sanitiser(txt):
+            txt = unicodedata.normalize('NFD', txt).encode('ascii', 'ignore').decode('utf-8')
+            return re.sub(r'[^a-zA-Z0-9]', '_', txt)
+
+        try:
+            # Calcul des distances cumulées pour les popups
+            dist_cumulee = 0
+            distances_etapes = [0.0]
+            for i in range(len(res.chemin) - 1):
+                u, v = res.chemin[i], res.chemin[i+1]
+                edge_data = min(self.G[u][v].values(), key=lambda x: x.get('poids_custom', 0))
+                dist_cumulee += edge_data.get('distance', 0) / 1000
+                distances_etapes.append(round(dist_cumulee, 2))
+
+            lats, lons = zip(*res.points_coordonnees)
+            m = folium.Map(location=[sum(lats)/len(lats), sum(lons)/len(lons)], zoom_start=14, tiles=None)
+
+            # Fonds de carte
+            folium.TileLayer(
+                tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attr='Esri', name='Esri Satellite', overlay=False, control=True
+            ).add_to(m)
+            folium.TileLayer('openstreetmap', name='OpenStreetMap', control=True).add_to(m)
+
+            # Tracé animé avec AntPath (montre le sens de circulation)
+            AntPath(
+                locations=res.points_coordonnees,
+                dash_array=[1, 10], delay=1000, color='blue', pulse_color='white',
+                weight=6, opacity=0.8, tooltip="Chemin optimal (animé)"
             ).add_to(m)
 
-        # Marqueur de DÉPART
-        folium.Marker(
-            res.points_coordonnees[0], 
-            popup=f"<b>Départ:</b> {n_dep}", 
-            tooltip="Point de départ",
-            icon=folium.Icon(color='green', icon='play', prefix='fa')
-        ).add_to(m)
-        
-        # Marqueur d'ARRIVÉE
-        folium.Marker(
-            res.points_coordonnees[-1], 
-            popup=f"<b>Arrivée:</b> {n_arr}", 
-            tooltip="Point d'arrivée",
-            icon=folium.Icon(color='red', icon='flag', prefix='fa')
-        ).add_to(m)
-        
-        # Panneau d'information flottant (Contrôle HTML personnalisé)
-        distance_km = res.distance_totale / 1000
-        nb_intermediaires = len(res.points_coordonnees) - 2
-        
-        from branca.element import Template, MacroElement
-        
-        template = f"""
-        {{% macro html(this, kwargs) %}}
-        <div style="
-            position: fixed; 
-            top: 10px; right: 10px; width: 320px; height: auto; 
-            background-color: rgba(255, 255, 255, 0.9); border: 2px solid #333; z-index:9999; font-size:14px;
-            padding: 15px; border-radius: 8px; box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
-            font-family: Arial, sans-serif;
-            ">
-            <h3 style="margin-top:0; color: #2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">🗺️ Légende du Trajet</h3>
-            <ul style="list-style-type: none; padding: 0; margin: 0; line-height: 1.8;">
-                <li>🏁 <b>Départ :</b> {n_dep}</li>
-                <li>🏁 <b>Arrivée :</b> {n_arr}</li>
-                <li>📏 <b>Distance :</b> {distance_km:.2f} km</li>
-                <li>📍 <b>POIs :</b> {nb_intermediaires}</li>
-                <li>⚡ <b>Algo :</b> DIJKSTRA</li>
-            </ul>
-        </div>
-        {{% endmacro %}}
-        """
-        macro = MacroElement()
-        macro._template = Template(template)
-        m.get_root().add_child(macro)
-        
-        # Ajout du contrôle des couches
-        folium.LayerControl().add_to(m)
+            # Rues pour le panneau
+            rues_liste = self._recuperer_noms_rues(res.chemin)
+            rues_html = "".join([f"<li style='margin-bottom:5px;'>🛣️ {r}</li>" for r in rues_liste])
 
-        fn = f"web_carte_{int(time.time())}.html"
-        m.save(fn)
-        print(f"✅ Carte Web interactive (Satellite) sauvegardée: '{fn}'")
+            # Marqueurs pour chaque étape
+            for i, (coord, node_id) in enumerate(zip(res.points_coordonnees, res.chemin)):
+                nom_lieu = self.G.nodes[node_id].get('name') or self.G.nodes[node_id].get('nom')
+                if not nom_lieu:
+                    for poi, pos in self.POINTS_INTERET.items():
+                        if self._haversine_distance(coord[0], coord[1], pos[0], pos[1]) < 0.05:
+                            nom_lieu = f"Près de {poi}"; break
+                if not nom_lieu: nom_lieu = f"Étape {i}"
+
+                popup_content = f"""
+                <div style='font-family: Arial; width: 180px;'>
+                    <b style='color:#2c3e50;'>{nom_lieu}</b><hr style='margin:5px 0;'>
+                    📏 Distance : {distances_etapes[i]:.2f} km<br>
+                    📍 Étape : {i}/{len(res.chemin)-1}
+                </div>
+                """
+                
+                if i == 0:
+                    folium.Marker(coord, popup=folium.Popup(popup_content), tooltip="Départ", icon=folium.Icon(color='green', icon='play')).add_to(m)
+                elif i == len(res.chemin) - 1:
+                    folium.Marker(coord, popup=folium.Popup(popup_content), tooltip="Arrivée", icon=folium.Icon(color='red', icon='flag')).add_to(m)
+                else:
+                    folium.CircleMarker(
+                        location=coord, radius=5, color='orange', fill=True, 
+                        popup=folium.Popup(popup_content), tooltip=f"Étape {i}/{len(res.chemin)-1}"
+                    ).add_to(m)
+
+            # Panneau flottant avec Scroll List
+            template = f"""
+            {{% macro html(this, kwargs) %}}
+            <div style="
+                position: fixed; top: 10px; right: 10px; width: 300px; 
+                max-height: 450px; background: rgba(255, 255, 255, 0.9); z-index: 9999; 
+                border: 2px solid #2c3e50; border-radius: 10px; padding: 15px;
+                font-family: 'Segoe UI', sans-serif; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                overflow-y: auto;">
+                <h3 style="margin-top:0; color: #e67e22; border-bottom: 2px solid #eee;">📍 Synthèse du Trajet</h3>
+                <p><b>🚩 Départ:</b> {n_dep}<br><b>🏁 Arrivée:</b> {n_arr}</p>
+                <p><b>📏 Distance:</b> {res.distance_totale/1000:.2f} km<br><b>⏱️ Temps:</b> {res.temps_total*60:.1f} min</p>
+                <h4 style="margin-bottom:10px;">🛣️ Rues traversées :</h4>
+                <ul style="padding-left:15px; font-size: 13px; color: #34495e;">
+                    {rues_html}
+                </ul>
+            </div>
+            {{% endmacro %}}
+            """
+            macro = MacroElement(); macro._template = Template(template)
+            m.get_root().add_child(macro)
+            folium.LayerControl().add_to(m)
+
+            fn = f"carte_trajet_{sanitiser(n_dep)}_{sanitiser(n_arr)}.html"
+            m.save(fn)
+            print(f"✅ Carte Web enrichie sauvegardée: '{fn}'")
+        except Exception as e:
+            print(f"❌ Erreur lors de la génération de la carte : {e}")
 
     # --- MENU INTERACTIF ---
     
